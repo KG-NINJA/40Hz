@@ -1,6 +1,7 @@
 let audioCtx;
 let oscillator;
 let gainNode;
+let analyser;
 let isPlaying = false;
 
 const playBtn = document.getElementById('playBtn');
@@ -37,6 +38,9 @@ function startSound() {
 
     oscillator = audioCtx.createOscillator();
     gainNode = audioCtx.createGain();
+    analyser = audioCtx.createAnalyser();
+
+    analyser.fftSize = 2048;
 
     oscillator.type = 'sine';
     oscillator.frequency.setValueAtTime(40, audioCtx.currentTime); // 40Hz
@@ -47,7 +51,8 @@ function startSound() {
     gainNode.gain.linearRampToValueAtTime(vol, audioCtx.currentTime + 2); // Slow fade in
 
     oscillator.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
+    gainNode.connect(analyser);
+    analyser.connect(audioCtx.destination);
 
     oscillator.start();
     isPlaying = true;
@@ -151,7 +156,54 @@ function animate() {
         p.draw();
     });
 
+    if (isPlaying && analyser) {
+        drawVisualizer();
+    }
+
     requestAnimationFrame(animate);
+}
+
+function drawVisualizer() {
+    const bufferLength = analyser.fftSize;
+    const dataArray = new Uint8Array(bufferLength);
+    analyser.getByteTimeDomainData(dataArray);
+
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(100, 200, 255, 0.5)';
+    ctx.beginPath();
+
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const radius = Math.min(width, height) * 0.2; // Base radius
+
+    const sliceAngle = (Math.PI * 2) / bufferLength;
+    let angle = 0;
+
+    for (let i = 0; i < bufferLength; i++) {
+        const v = dataArray[i] / 128.0; // 1.0 is silence
+        const currentRadius = radius + (v * radius * 0.5) - (radius * 0.5); // Modulate radius
+
+        const x = centerX + Math.cos(angle) * currentRadius;
+        const y = centerY + Math.sin(angle) * currentRadius;
+
+        if (i === 0) {
+            ctx.moveTo(x, y);
+        } else {
+            ctx.lineTo(x, y);
+        }
+
+        angle += sliceAngle;
+    }
+
+    ctx.closePath();
+
+    // Add glow
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = 'rgba(100, 255, 255, 0.8)';
+    ctx.stroke();
+
+    // Reset shadow for other draws (though cleared next frame)
+    ctx.shadowBlur = 0;
 }
 
 // Start visuals
